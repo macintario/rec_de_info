@@ -1,12 +1,16 @@
 from nltk import word_tokenize, ngrams
+import pymongo
 import nltk as nltk
 import csv
 import math
 
+bufferNoticias = []
 
 stopWords = {}
 lema_d = {}
 terminos = {}
+
+textoLematizado = []
 
 def CargarDiccionarioLemas():
     file=open("diccionarioLematizador.txt","r")
@@ -65,43 +69,60 @@ def crearDiicionarioBigrama():
     return terminos
 
 def crearDiicionario():
-
+    id=0
 #    with open('noticias_Apple.csv', 'r') as csvfile:
     with open('na.csv', 'r') as csvfile:
         fileReader = csv.reader(csvfile, delimiter=',', quotechar='"')
 
         for linea in fileReader:
             # print(linea[4].lower())
+            renglonLematizado = []
+            #bufferNoticias[id] = []
+            bufferNoticias.append([{"id":id},{"encabezado":linea[4]},{"url":linea[5]},{"noticia":linea[6]},{"vector":[]}])
+            id += 1
             lineaSplit = word_tokenize(linea[4])
 
             for palabra in lineaSplit:
                 palabra = palabra.lower()
                 if palabra not in stopWords:
                     palabra = lematizador(lema_d, palabra)
-                    print(palabra)
+                    #print(palabra)
+                    renglonLematizado.append(palabra)
                     terminos[palabra] = 1
-        print(terminos)
+            textoLematizado.append(renglonLematizado)
+        #print(terminos)
+
     return terminos
 #crearDiicionario()
 
+
+
 def crearMatrizTerminoDocumento():
-    terminos = crearDiicionarioBigrama()
-
-    with open('noticias_Apple.csv', 'r') as csvfile:
-        fileReader = csv.reader(csvfile, delimiter=',', quotechar='"')
-
-        for linea in fileReader:
-            listaVectorDocumento = []
-            for bigrama in terminos:
-                #print(word)
-                listaDocumento = word_tokenize(linea[4])
-
-                if bigrama in listaDocumento:
-                    listaVectorDocumento.append(listaDocumento.count(bigrama))
-                else:
-                    listaVectorDocumento.append(0)
-            print(listaVectorDocumento)
-
+#    terminos = crearDiicionarioBigrama()
+    matrizTD = []
+    nLinea = 0
+#    with open('noticias_Apple.csv', 'r') as csvfile:
+#    with open('na.csv', 'r') as csvfile:
+#        fileReader = csv.reader(csvfile, delimiter=',', quotechar='"')
+    for linea in textoLematizado:
+        listaVectorDocumento = [0]*len(terminos)
+        for palabraLematizada in linea:
+            nTermino = 0
+            for palabraDicc in terminos:
+                if palabraDicc == palabraLematizada:
+                    listaVectorDocumento[nTermino] = 1
+                #else:
+                #    listaVectorDocumento.insert(nTermino, 0)
+                nTermino += 1
+            #print(listaVectorDocumento)
+        #registro = bufferNoticias[nLinea][4]
+        #registro["vector"] = listaVectorDocumento
+        bufferNoticias[nLinea][4]["vector"] = listaVectorDocumento
+        #print(registro)
+        nLinea +=1
+        matrizTD.append(listaVectorDocumento)
+    print(matrizTD)
+    print(bufferNoticias)
 #crearMatrizTerminoDocumento()
 
 def crearVEctorConsulta(texto):
@@ -116,7 +137,7 @@ def crearVEctorConsulta(texto):
         else:
             vectorConsulta.append(0)
 
-    print(vectorConsulta)
+    #print(vectorConsulta)
     return vectorConsulta
 
 def cosine_similarity(v1,v2):
@@ -129,13 +150,27 @@ def cosine_similarity(v1,v2):
         sumxy += x*y
     return sumxy/math.sqrt(sumxx*sumyy)
 
+def almacenaMongo(coleccion,buffer):
+    for registro in buffer:
+        print(registro)
+        insercion = coleccion.insert(registro)
+        print(insercion.inserted_ids)
+    return 0
 
+################################################ main ###################################
 
-
-nltk.download('punkt')
+#nltk.download('punkt')
 cargaStopWords()
 lema_d = CargarDiccionarioLemas()
 terminos = crearDiicionario()
+matrizTD = crearMatrizTerminoDocumento()
 
-vectorConsulta = crearVEctorConsulta(" no conocer amazon sale lanza !!!")
+cliente = pymongo.MongoClient("mongodb://localhost:27018/")
+servidor = cliente["localhost"]
+coleccion = servidor["recinfo"]
 
+almacenaMongo(coleccion,bufferNoticias)
+
+#vectorConsulta = crearVEctorConsulta(" no conocer amazon sale lanza !!!")
+#almacena vector en BDD y conservar matriz en memoria.
+#busca vectorconsulta en metriz y luego buca vectores resultantes en BDD para trer noticias
