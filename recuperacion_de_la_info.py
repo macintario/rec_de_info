@@ -3,6 +3,7 @@ import pymongo
 import nltk as nltk
 import csv
 import math
+from flask import Flask ,request, jsonify
 
 bufferNoticias = []
 
@@ -11,6 +12,13 @@ lema_d = {}
 terminos = {}
 
 textoLematizado = []
+
+matrizTD =[]
+
+cliente = pymongo.MongoClient("mongodb://localhost:27018/") #server
+basedd = cliente["recinfo"] #database
+coleccion = basedd["noticias"]
+
 
 def CargarDiccionarioLemas():
     file=open("diccionarioLematizador.txt","r")
@@ -99,7 +107,6 @@ def crearDiicionario():
 
 def crearMatrizTerminoDocumento():
 #    terminos = crearDiicionarioBigrama()
-    matrizTD = []
     nLinea = 0
 #    with open('noticias_Apple.csv', 'r') as csvfile:
 #    with open('na.csv', 'r') as csvfile:
@@ -142,9 +149,9 @@ def crearVEctorConsulta(texto):
 
 def cosine_similarity(v1,v2):
     "compute cosine similarity of v1 to v2: (v1 dot v2)/{||v1||*||v2||)"
-    sumxx, sumxy, sumyy = 0, 0, 0
+    sumxx, sumxy, sumyy = 0., 0., 0.
     for i in range(len(v1)):
-        x = v1[i]; y = v2[i]
+        x = v1[i]+0.; y = v2[i]+0.
         sumxx += x*x
         sumyy += y*y
         sumxy += x*y
@@ -152,10 +159,30 @@ def cosine_similarity(v1,v2):
 
 def almacenaMongo(coleccion,buffer):
     for registro in buffer:
-        print(registro)
-        insercion = coleccion.insert({"noticia":registro})
+        # print(registro)
+        insercion = coleccion.insert({"id":registro[0]["id"],
+                                      "encabezado": registro[1]["encabezado"],
+                                      "url": registro[2]["url"],
+                                      "noticia":registro[3]["noticia"],
+                                      "vector":registro[4]["vector"]
+                                      })
         #print(insercion)
+        #id,encabezado,url,noticia,vector
     return 0
+
+def getTopFive(queryVector,matrizTD):
+    topFive =  []
+    distancias = []
+    nDoc=0
+    for vDoc in matrizTD:
+        distancia = cosine_similarity(queryVector, vDoc)
+        distancias.append([nDoc,distancia])
+        nDoc += 1
+    distancias.sort(key=lambda d: d[1],reverse=1)
+    print(distancias)
+    topFive = distancias[:5]
+    return topFive
+
 
 ################################################ main ###################################
 
@@ -163,13 +190,29 @@ def almacenaMongo(coleccion,buffer):
 cargaStopWords()
 lema_d = CargarDiccionarioLemas()
 terminos = crearDiicionario()
-matrizTD = crearMatrizTerminoDocumento()
+crearMatrizTerminoDocumento()
 
-cliente = pymongo.MongoClient("mongodb://localhost:27018/")
-servidor = cliente["recinfo"]
-coleccion = servidor["noticias"]
+almacenaMongo(coleccion,bufferNoticias) #almacenamos las noticias
 
-almacenaMongo(coleccion,bufferNoticias)
+
+##################### Levantamiento de EndPoint   ###########################
+app = Flask(__name__)
+@app.route('/noticias', methods=['GET'])
+def getNewsFromDatabase():
+
+#http://localhost:5000/noticias?palabras=apple,servicio,spotify
+    print(request.args)
+    queryVector = crearVEctorConsulta(request.args["palabras"])
+    top5 = getTopFive(queryVector,matrizTD)
+    lasNoticias = []
+    for doc,dist in top5:
+        noticia  =  coleccion.find_one({"id":doc},{"_id":0})
+        lasNoticias.append(noticia)
+        print(noticia)
+    return jsonify(success=True, data=lasNoticias)
+
+if __name__ == "__main__":
+  app.run(host='localhost', port=5000, debug=True)
 
 #vectorConsulta = crearVEctorConsulta(" no conocer amazon sale lanza !!!")
 #almacena vector en BDD y conservar matriz en memoria.
