@@ -153,8 +153,8 @@ def cosine_similarity(v1,v2):
 def almacenaMongo(coleccion,buffer):
     for registro in buffer:
         print(registro)
-        insercion = coleccion.insert(registro)
-        print(insercion.inserted_ids)
+        insercion = coleccion.insert({"noticia":registro})
+        #print(insercion)
     return 0
 
 ################################################ main ###################################
@@ -166,11 +166,12 @@ terminos = crearDiicionario()
 matrizTD = crearMatrizTerminoDocumento()
 
 cliente = pymongo.MongoClient("mongodb://localhost:27018/")
-servidor = cliente["localhost"]
-coleccion = servidor["recinfo"]
+servidor = cliente["recinfo"]
+coleccion = servidor["noticias"]
 
 almacenaMongo(coleccion,bufferNoticias)
 
 #vectorConsulta = crearVEctorConsulta(" no conocer amazon sale lanza !!!")
 #almacena vector en BDD y conservar matriz en memoria.
 #busca vectorconsulta en metriz y luego buca vectores resultantes en BDD para trer noticias
+#qry: db.noticias.find({"noticia":{"vector":[ 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0]}})
